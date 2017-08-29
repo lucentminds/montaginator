@@ -12,16 +12,19 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
+	"image/jpeg"
 	"io/ioutil"
 	"log"
 	"os"
+	"bufio"
 )
-
-import "github.com/disintegration/imaging"
 
 // Required boilerplate entry function for all go applications.
 func main() {
 	// Start defining your application here.
+	var opt jpeg.Options
+
 	//fmt.Println( os.Args )
 
 	// Determines the path to the images directory.
@@ -31,7 +34,7 @@ func main() {
 	cOutputFile := os.Args[2]
 
 	// Verify images directory
-	lExists, err := exists( cPathImages )
+	lExists, err := exists(cPathImages)
 
 	if err != nil {
 		// Failed to verify images directory.
@@ -54,28 +57,50 @@ func main() {
 	nHeightAll := nHeightOne * len(aFiles)
 
 	// Determines the main montage image object.
-	imgMontage := imaging.New(nWidthOne, nHeightAll, color.NRGBA{0, 0, 0, 0})
+	imgMontage := image.NewRGBA(image.Rect(0, 0, nWidthOne, nHeightAll))
+
+	// Determines the color black.
+	rgbaBlack := color.NRGBA{0, 0, 0, 0}
+
+	// Draw the black color as the background to the montage image.
+	draw.Draw(imgMontage, imgMontage.Bounds(), &image.Uniform{rgbaBlack}, image.ZP, draw.Src)
+
+	// Create a new output file to write to.
+	out, err := os.Create( cOutputFile )
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// Determines the current y position multiplier for the next image.
 	nY := 0
 
 	// Loop over each image in the images directory.
 	for _, oFile := range aFiles {
 
 		// Open the next image.
-		src, err := imaging.Open(cPathImages + "/" + oFile.Name())
-
+		src, _, err := decode(cPathImages + "/" + oFile.Name())
 		if err != nil {
-			// Failed to open the next image.
-			log.Fatalf("Open failed: %v", err)
+			fmt.Println(err)
+			os.Exit(1)
 		}
 
 		// Paste the next image into the main montage image below the previous
 		// image.
-		imgMontage = imaging.Paste(imgMontage, src, image.Pt(0, nHeightOne*nY))
+		draw.Draw(imgMontage, image.Rect( 0, nHeightOne*nY, nWidthOne, nHeightAll ), src, image.ZP, draw.Src)
+		
 		nY++
 	} // /for()
 
+	// put quality to x%
+	opt.Quality = 90
+
 	// Save the final montage image file.
-	imaging.Save(imgMontage, cOutputFile)
+	err = jpeg.Encode(out, imgMontage, &opt) 
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 } // /main()
 
 func getImageDimension(imagePath string) (int, int) {
@@ -93,8 +118,21 @@ func getImageDimension(imagePath string) (int, int) {
 
 // exists returns whether the given file or directory exists or not
 func exists(path string) (bool, error) {
-    _, err := os.Stat(path)
-    if err == nil { return true, nil }
-    if os.IsNotExist(err) { return false, nil }
-    return true, err
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
 }
+
+func decode(filename string) (image.Image, string, error) {
+  	f, err := os.Open(filename)
+  	if err != nil {
+  		return nil, "", err
+  	}
+  	defer f.Close()
+  	return image.Decode(bufio.NewReader(f))
+  }
