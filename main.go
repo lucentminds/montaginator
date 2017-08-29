@@ -27,6 +27,13 @@ func main() {
 
 	//fmt.Println( os.Args )
 
+	// Check to make sure we've got two arguments.
+	if( len( os.Args ) < 3 ) {
+		// Missing one or more arguments.
+		fmt.Println( "Useage: montaginator /path/to/image/dir /path/to/output.jpg" )
+		log.Fatalf( "error: Missing one or more arguments." )
+	}
+
 	// Determines the path to the images directory.
 	cPathImages := os.Args[1]
 
@@ -101,6 +108,8 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	out.Close()
 } // /main()
 
 func getImageDimension(imagePath string) (int, int) {
