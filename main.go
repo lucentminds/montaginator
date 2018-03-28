@@ -23,7 +23,13 @@ import (
 // Required boilerplate entry function for all go applications.
 func main() {
 	// Start defining your application here.
+	var err error
 	var opt jpeg.Options
+	var oFile os.FileInfo
+	var oImgSrc image.Image
+
+	zP := image.ZP
+	drawSource := draw.Src
 
 	//fmt.Println( os.Args )
 
@@ -56,9 +62,20 @@ func main() {
 	// Scan the directory for the image files.
 	aFiles, _ := ioutil.ReadDir(cPathImages)
 
+	
+	oFile, aFiles = aFiles[0], aFiles[1:]
+	oImg01, _, err := decode(cPathImages + "/" + oFile.Name())
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	// Determine the width and height of the first image.
 	// All other images should be the same.
-	nWidthOne, nHeightOne := getImageDimension(cPathImages + "/" + aFiles[0].Name())
+	//nWidthOne, nHeightOne := getImageDimension(cPathImages + "/" + aFiles[0].Name())
+	oImg01Bounds := oImg01.Bounds();
+	nWidthOne := oImg01Bounds.Max.X;
+	nHeightOne := oImg01Bounds.Max.Y;
 
 	// Determines the total height the final montage image will be.
 	nHeightAll := nHeightOne * len(aFiles)
@@ -67,26 +84,24 @@ func main() {
 	imgMontage := image.NewRGBA(image.Rect(0, 0, nWidthOne, nHeightAll))
 
 	// Determines the color black.
-	rgbaBlack := color.NRGBA{0, 0, 0, 0}
+	//rgbaBlack := color.NRGBA{0, 0, 0, 0}
 
 	// Draw the black color as the background to the montage image.
-	draw.Draw(imgMontage, imgMontage.Bounds(), &image.Uniform{rgbaBlack}, image.ZP, draw.Src)
+	//draw.Draw(imgMontage, imgMontage.Bounds(), &image.Uniform{rgbaBlack}, image.ZP, draw.Src)
+	draw.Draw(imgMontage, imgMontage.Bounds(), &image.Uniform{color.NRGBA{0, 0, 0, 0}}, zP, drawSource)
+	
+	// Draw image one onto the main montage image.
+	draw.Draw(imgMontage, image.Rect( 0, 0, nWidthOne, nHeightAll ), oImg01, zP, drawSource)
 
-	// Create a new output file to write to.
-	out, err := os.Create( cOutputFile )
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 
 	// Determines the current y position multiplier for the next image.
-	nY := 0
+	nY := 1
 
-	// Loop over each image in the images directory.
-	for _, oFile := range aFiles {
+	// Loop over each remaining image in the images directory.
+	for _, oFile = range aFiles {
 
 		// Open the next image.
-		src, _, err := decode(cPathImages + "/" + oFile.Name())
+		oImgSrc, _, err = decode(cPathImages + "/" + oFile.Name())
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -94,13 +109,23 @@ func main() {
 
 		// Paste the next image into the main montage image below the previous
 		// image.
-		draw.Draw(imgMontage, image.Rect( 0, nHeightOne*nY, nWidthOne, nHeightAll ), src, image.ZP, draw.Src)
+		draw.Draw(imgMontage, image.Rect( 0, nHeightOne*nY, nWidthOne, nHeightAll ), oImgSrc, zP, drawSource)
 		
 		nY++
 	} // /for()
+	
+	// Create a new output file to write to.
+	out, err := os.Create( cOutputFile )
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	// Close output file.
+	defer out.Close()
 
 	// put quality to x%
-	opt.Quality = 90
+	opt.Quality = 100
 
 	// Save the final montage image file.
 	err = jpeg.Encode(out, imgMontage, &opt) 
@@ -109,21 +134,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	out.Close()
 } // /main()
 
-func getImageDimension(imagePath string) (int, int) {
-	file, err := os.Open(imagePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-	}
+// func getImageDimension(imagePath string) (int, int) {
+// 	file, err := os.Open(imagePath)
+// 	if err != nil {
+// 		fmt.Fprintf(os.Stderr, "%v\n", err)
+// 	}
 
-	image, _, err := image.DecodeConfig(file)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", imagePath, err)
-	}
-	return image.Width, image.Height
-} // /getImageDimension()
+// 	image, _, err := image.DecodeConfig(file)
+// 	if err != nil {
+// 		fmt.Fprintf(os.Stderr, "%s: %v\n", imagePath, err)
+// 	}
+// 	return image.Width, image.Height
+// } // /getImageDimension()
 
 // exists returns whether the given file or directory exists or not
 func exists(path string) (bool, error) {
@@ -138,10 +162,15 @@ func exists(path string) (bool, error) {
 }
 
 func decode(filename string) (image.Image, string, error) {
-  	f, err := os.Open(filename)
-  	if err != nil {
-  		return nil, "", err
-  	}
-  	defer f.Close()
-  	return image.Decode(bufio.NewReader(f))
-  }
+	var f *os.File
+	var err error
+
+	f, err = os.Open(filename)
+	if err != nil {
+		return nil, "", err
+	}
+	
+	defer f.Close()
+	
+	return image.Decode(bufio.NewReader(f))
+}
